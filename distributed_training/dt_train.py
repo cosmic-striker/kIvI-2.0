@@ -1,74 +1,103 @@
+import os
 import torch
 import torch.distributed as dist
-from torch.utils.data import DataLoader, Dataset
+import torch.multiprocessing as mp
+import torch.nn as nn
+import torch.optim as optim
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader, DistributedSampler, Dataset
 from models.bart_model import BARTModel
-from models.tokenizer import Tokenizer
 from models.config import config
-from utils.helper import save_model
-from torch import optim, nn
-import os
+from utils.helper import save_model_checkpoint, load_model_checkpoint
 
+# Dummy Dataset
 class CustomDataset(Dataset):
-    def __init__(self, data_path, tokenizer):
-        self.data_path = data_path
-        self.tokenizer = tokenizer
-        self.data = self.load_data()
-
-    def load_data(self):
-        with open(self.data_path, 'r', encoding='utf-8') as f:
-            text = f.readlines()
-        return [self.tokenizer.encode(line.strip()) for line in text]
+    def __init__(self, data, targets):
+        self.data = data
+        self.targets = targets
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.data[idx])
+        return self.data[idx], self.targets[idx]
 
-def train(model, tokenizer, train_data_path, epochs=5, batch_size=16, learning_rate=5e-5, device='cuda'):
-    print("=== Starting Distributed Training ===")
+# Initialize Distributed Environment
+def setup_distributed(rank, world_size):
+    os.environ['MASTER_ADDR'] = '127.0.0.1'  # Change this to server IP if needed
+    os.environ['MASTER_PORT'] = '29500'      # Default port
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    torch.cuda.set_device(rank)
+    print(f"[Rank {rank}] Distributed process initialized.")
 
-    dataset = CustomDataset(train_data_path, tokenizer)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+# Clean up the Distributed Environment
+def cleanup_distributed():
+    dist.destroy_process_group()
 
-    model.to(device)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[dist.get_rank()])
+# Training Function
+def train(rank, world_size):
+    print(f"[Rank {rank}] Starting training...")
 
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)
+    # Setup distributed environment
+    setup_distributed(rank, world_size)
 
-    for epoch in range(epochs):
-        model.train()
-        total_loss = 0.0
-        for step, batch in enumerate(dataloader):
-            batch = batch.to(device)
+    # Configuration
+    device = torch.device(f"cuda:{rank}" if torch.cuda.is_available() else "cpu")
+    batch_size = config['batch_size'] // world_size  # Divide batch size across workers
+
+    # Create Model
+    model = BARTModel(vocab_size=config['vocab_size']).to(device)
+    model = DDP(model, device_ids=[rank])
+
+    # Optimizer and Loss
+    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
+    criterion = nn.CrossEntropyLoss()
+
+    # Dummy Data (Replace this with your actual dataset)
+    data = torch.randint(0, config['vocab_size'], (1000, 50))  # Example input data
+    targets = torch.randint(0, config['vocab_size'], (1000, 50))  # Example target data
+    dataset = CustomDataset(data, targets)
+
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
+    dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler)
+
+    # Training Loop
+    model.train()
+    for epoch in range(config['epochs']):
+        sampler.set_epoch(epoch)  # Shuffle data each epoch
+        running_loss = 0.0
+
+        for batch_idx, (inputs, targets) in enumerate(dataloader):
+            inputs, targets = inputs.to(device), targets.to(device)
+
             optimizer.zero_grad()
-            outputs = model(batch, labels=batch)
-            loss = outputs.loss
-            total_loss += loss.item()
+            outputs = model(inputs)
+
+            loss = criterion(outputs.view(-1, config['vocab_size']), targets.view(-1))
             loss.backward()
             optimizer.step()
 
-            if step % 100 == 0:
-                print(f"Epoch {epoch+1}/{epochs}, Step {step}, Loss: {loss.item()}")
+            running_loss += loss.item()
+            if batch_idx % 10 == 0 and rank == 0:
+                print(f"[Rank {rank}] Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item():.4f}")
 
-        avg_loss = total_loss / len(dataloader)
-        print(f"Epoch {epoch+1} completed. Average Loss: {avg_loss}")
-        checkpoint_path = f"results/checkpoints/epoch_{epoch+1}_rank_{dist.get_rank()}.pt"
-        save_model(model, checkpoint_path)
-        print(f"Checkpoint saved at: {checkpoint_path}")
+        if rank == 0:
+            print(f"[Rank {rank}] Epoch {epoch} completed. Avg Loss: {running_loss / len(dataloader):.4f}")
 
-    print("=== Distributed Training Complete ===")
+        # Save checkpoint (only on rank 0)
+        if rank == 0:
+            save_model_checkpoint(model.module, optimizer, epoch, config['checkpoint_dir'])
 
+    # Cleanup
+    cleanup_distributed()
+    print(f"[Rank {rank}] Training completed.")
+
+# Entry Point for Multiprocessing
 def main():
-    # Initialize distributed environment
-    dist.init_process_group(backend="nccl")
-    train_data_path = "data/raw/sample_train.txt"
-    tokenizer = Tokenizer(train_data_path=train_data_path, vocab_size=config['vocab_size'])
-    model = BARTModel(vocab_size=config['vocab_size'])
+    world_size = torch.cuda.device_count() if torch.cuda.is_available() else 2  # Default to 2 processes if no GPUs
+    print(f"Using {world_size} processes for distributed training.")
 
-    device = f'cuda:{dist.get_rank()}'
-    train(model, tokenizer, train_data_path, device=device)
+    mp.spawn(train, args=(world_size,), nprocs=world_size, join=True)
 
 if __name__ == "__main__":
     main()
