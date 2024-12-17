@@ -8,7 +8,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler, Dataset
 from models.bart_model import BARTModel
 from models.config import config
-from utils.helper import save_model_checkpoint, load_model_checkpoint
+from utils.helper import save_checkpoint as save_model_checkpoint, load_checkpoint as load_model_checkpoint
 from utils.logger import Logger
 import socket
 
