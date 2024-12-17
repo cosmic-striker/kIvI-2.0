@@ -46,3 +46,13 @@ DISTRIBUTED_CONFIG = {
     "master_ip": "127.0.0.1", # Master node's IP (adjust as per your setup)
     "master_port": "29500",  # Port for distributed communication
 }
+
+config = {
+    "vocab_size": 1000,
+    "hidden_size": 768,
+    "num_layers": 6,
+    "num_heads": 8,
+    "ffn_dim": 2048,
+    "dropout": 0.1
+}
+
