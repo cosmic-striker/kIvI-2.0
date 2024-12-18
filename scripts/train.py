@@ -5,7 +5,7 @@ from models.tokenizer import Tokenizer
 from models.config import config
 from utils.helper import save_model, print_summary
 from torch import optim, nn
-import os
+
 
 class CustomDataset(Dataset):
     def __init__(self, data_path, tokenizer):

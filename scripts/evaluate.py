@@ -5,7 +5,6 @@ from models.tokenizer import Tokenizer
 from utils.helper import load_model
 from rouge_score import rouge_scorer  # For ROUGE metrics
 from nltk.translate.bleu_score import sentence_bleu  # For BLEU Score
-import os
 
 # Custom Dataset for Evaluation
 class TestDataset(Dataset):
