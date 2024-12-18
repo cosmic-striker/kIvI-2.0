@@ -1,0 +1,10 @@
+torch==2.0.1  # Replace <version> with the PyTorch version you are using
+numpy==1.23.5  # Replace <version> with the NumPy version you are using
+matplotlib==3.6.2  # For any plotting requirements
+scipy==1.9.3  # For scientific computations
+tqdm==4.64.1  # For progress bars
+pandas==1.5.2  # If your DataShare class uses DataFrames
+transformers==4.24.0  # If leveraging tokenizers from Hugging Face (optional)
+jsonschema==4.17.0  # For validating configurations (optional)
+psutil==5.9.4  # For system information logging
+scikit-learn==1.1.3  # For evaluation metrics
