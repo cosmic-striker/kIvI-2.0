@@ -15,12 +15,15 @@ class Logger:
         self.rank = rank
         self.system_name = socket.gethostname()
 
-        # Ensure log directory exists
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.log_dir = os.path.join(self.log_dir, f"{timestamp}_rank_{rank}_logs")
+        # Ensure the root log directory exists
         os.makedirs(self.log_dir, exist_ok=True)
 
-        # Complete log file path
+        # Add timestamp and rank to the directory path
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.log_dir = os.path.join(self.log_dir, f"{timestamp}_rank_{rank}_logs")
+        os.makedirs(self.log_dir, exist_ok=True)  # Create the timestamped directory
+
+        # Full path to the log file
         full_log_path = os.path.join(self.log_dir, self.log_file)
 
         # Logger Setup
@@ -68,3 +71,12 @@ class Logger:
     def critical(self, message):
         """Log a CRITICAL level message."""
         self.logger.critical(message)
+
+# Test the logger
+if __name__ == "__main__":
+    logger = Logger(log_file="main_training.log", rank=0)
+    logger.info("Logger initialized successfully.")
+    logger.debug("This is a debug message for testing.")
+    logger.warning("This is a warning message.")
+    logger.error("This is an error message.")
+    logger.critical("This is a critical message.")

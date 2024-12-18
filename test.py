@@ -2,6 +2,7 @@ from models.bart_model import BARTModel
 from models.tokenizer import Tokenizer
 from utils.helper import save_model, load_model, print_summary
 from models.config import config
+import torch
 
 def test_model():
     """
@@ -41,7 +42,7 @@ def test_save_load_model():
     """
     print("\n=== Testing Save/Load Model ===")
     vocab_size = config['vocab_size']
-    save_path = "checkpoints/test_model.txt"
+    save_path = "results/checkpoints/test_model.pt"
     try:
         # Initialize model
         model = BARTModel(vocab_size=vocab_size)
