@@ -102,7 +102,7 @@ def main():
                 logger.info("User selected Local Training mode.")
                 logger.info("Starting Local Training...")
                 try:
-                    local_train(dataset_path=dataset_path, gpu=gpu_available, checkpoint_dir=checkpoint_dir)
+                    local_train(dataset_path, gpu=gpu_available)
                 except Exception as e:
                     logger.error(f"Error during Local Training: {e}")
                 break
@@ -124,7 +124,7 @@ def main():
     logger.info("Starting Model Evaluation...")
     try:
         model_path = os.path.join(checkpoint_dir, "final_trained_model.pth")
-        test_data_path = os.path.join("data", "processed", "test_data.txt")
+        test_data_path = os.path.join("data", "processed", "test_data.txt") ##want to add the path to the test data
         tokenizer_path = os.path.join("tokenizers", "tokenizer.json")
         evaluate(model_path=model_path, test_data_path=test_data_path, tokenizer_path=tokenizer_path)
     except Exception as e:

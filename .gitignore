@@ -17,7 +17,7 @@ data
 data/raw/
 data/processed/
 data/raw/tamil.txt
-
+data/raw/english.txt
 
 # Ignore the entire data directory except for specific files if needed
 data/*
