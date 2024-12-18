@@ -1,5 +1,32 @@
-**/*.pyc
-**/__pycache__
-test.py
-logs
-results
+# Ignore all compiled Python files
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore all __pycache__ directories
+__pycache__/
+
+# Ignore the logs directory
+logs/
+
+# Ignore the results directory
+results/
+
+# Ignore the raw and processed data directories under data
+data
+data/raw/
+data/processed/
+data/raw/tamil.txt
+
+
+# Ignore the entire data directory except for specific files if needed
+data/*
+
+# Ignore the checkpoints directory
+checkpoints/
+checkpoints/*
+checkpoints
+# Ignore tokenizer files and directory
+tokenizers/
+# Optional: Ignore Jupyter Notebook checkpoints (if using notebooks)
+.ipynb_checkpoints/

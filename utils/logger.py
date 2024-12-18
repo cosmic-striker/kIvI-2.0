@@ -1,82 +1,43 @@
-import logging
 import os
-import socket
+import logging
 from datetime import datetime
 
-# Logger Utility Class
 class Logger:
-    def __init__(self, log_dir="logs", log_file="training.log", rank=0, log_level=logging.INFO):
+    def __init__(self, log_file, rank=0):
         """
-        Initializes a Logger instance with directory, file name, rank, and log level.
+        Custom logger to handle logs with timestamp and rank-specific information.
         """
-        self.log_dir = log_dir
-        self.log_file = log_file
-        self.log_level = log_level
-        self.rank = rank
-        self.system_name = socket.gethostname()
-
-        # Ensure the root log directory exists
-        os.makedirs(self.log_dir, exist_ok=True)
-
-        # Add timestamp and rank to the directory path
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.log_dir = os.path.join(self.log_dir, f"{timestamp}_rank_{rank}_logs")
-        os.makedirs(self.log_dir, exist_ok=True)  # Create the timestamped directory
-
-        # Full path to the log file
-        full_log_path = os.path.join(self.log_dir, self.log_file)
-
-        # Logger Setup
-        self.logger = logging.getLogger(f"rank_{rank}")
-        self.logger.setLevel(self.log_level)
-
-        # Prevent duplicate handlers
-        if self.logger.hasHandlers():
-            self.logger.handlers.clear()
-
-        # File Handler
-        file_handler = logging.FileHandler(full_log_path)
-        file_handler.setLevel(self.log_level)
-        formatter = logging.Formatter(
-            f"[%(asctime)s] [System: {self.system_name}] [Rank: {rank}] - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        full_log_path = os.path.join(
+            os.path.splitext(log_file)[0] + f"_{timestamp}_rank_{rank}.log"
         )
-        file_handler.setFormatter(formatter)
 
-        # Console Handler
+        # Ensure the directory for logs exists
+        os.makedirs(os.path.dirname(full_log_path), exist_ok=True)
+
+        # Set up logger
+        self.logger = logging.getLogger(f"Logger_{rank}")
+        self.logger.setLevel(logging.INFO)
+
+        # Console handler
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(self.log_level)
-        console_handler.setFormatter(formatter)
-
-        # Add Handlers
-        self.logger.addHandler(file_handler)
+        console_handler.setLevel(logging.INFO)
+        console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        console_handler.setFormatter(console_formatter)
         self.logger.addHandler(console_handler)
 
+        # File handler
+        file_handler = logging.FileHandler(full_log_path)
+        file_handler.setLevel(logging.INFO)
+        file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        self.logger.addHandler(file_handler)
+
     def info(self, message):
-        """Log an INFO level message."""
         self.logger.info(message)
 
-    def error(self, message):
-        """Log an ERROR level message."""
-        self.logger.error(message)
-
     def warning(self, message):
-        """Log a WARNING level message."""
         self.logger.warning(message)
 
-    def debug(self, message):
-        """Log a DEBUG level message."""
-        self.logger.debug(message)
-
-    def critical(self, message):
-        """Log a CRITICAL level message."""
-        self.logger.critical(message)
-
-# Test the logger
-if __name__ == "__main__":
-    logger = Logger(log_file="main_training.log", rank=0)
-    logger.info("Logger initialized successfully.")
-    logger.debug("This is a debug message for testing.")
-    logger.warning("This is a warning message.")
-    logger.error("This is an error message.")
-    logger.critical("This is a critical message.")
+    def error(self, message):
+        self.logger.error(message)

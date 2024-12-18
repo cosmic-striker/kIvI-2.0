@@ -1,69 +1,97 @@
+import os
 import torch
-from torch.utils.data import DataLoader, Dataset
-from models.bart_model import BARTModel
-from models.tokenizer import Tokenizer
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
 from models.config import config
-from utils.helper import save_model, print_summary
-from torch import optim, nn
+from utils.logger import Logger
 
+# Dummy model and dataset for demonstration
+class SimpleModel(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(SimpleModel, self).__init__()
+        self.fc = nn.Linear(input_size, output_size)
+    
+    def forward(self, x):
+        return self.fc(x)
 
-class CustomDataset(Dataset):
-    def __init__(self, data_path, tokenizer):
-        self.data_path = data_path
-        self.tokenizer = tokenizer
-        self.data = self.load_data()
-
-    def load_data(self):
-        with open(self.data_path, 'r', encoding='utf-8') as f:
-            text = f.readlines()
-        return [self.tokenizer.encode(line.strip()) for line in text]
+class DummyDataset(torch.utils.data.Dataset):
+    def __init__(self, size, input_dim):
+        self.size = size
+        self.input_dim = input_dim
 
     def __len__(self):
-        return len(self.data)
+        return self.size
 
     def __getitem__(self, idx):
-        return torch.tensor(self.data[idx])
+        # Random input and output tensors for dummy data
+        x = torch.randn(self.input_dim)
+        y = torch.randint(0, 2, (1,)).item()
+        return x, y
 
-def train(model, tokenizer, train_data_path, epochs=5, batch_size=16, learning_rate=5e-5, device='cuda'):
-    print("=== Starting Training ===")
+def train(dataset_dir, gpu):
+    """
+    Function to train the model locally.
     
-    dataset = CustomDataset(train_data_path, tokenizer)
+    Args:
+    - dataset_dir (str): Path to the dataset directory.
+    - gpu (bool): Whether to use GPU or CPU for training.
+    """
+    # Initialize logger
+    rank = int(os.getenv("RANK", 0))
+    log_file = os.path.join(config.get("log_dir", "logs"), "local_training.log")
+    logger = Logger(log_file=log_file, rank=rank)
+
+    logger.info("=== Starting Local Training ===")
+    logger.info(f"Dataset directory: {dataset_dir}")
+    logger.info(f"Using GPU: {gpu}")
+
+    # Set device
+    device = torch.device("cuda" if gpu and torch.cuda.is_available() else "cpu")
+    logger.info(f"Training on device: {device}")
+
+    # Dataset and DataLoader
+    input_dim = config.get("input_dim", 10)  # Replace with actual input dim
+    dataset_size = config.get("dataset_size", 1000)  # Replace with actual size
+    batch_size = config.get("batch_size", 32)
+    num_epochs = config.get("num_epochs", 10)
+    
+    dataset = DummyDataset(size=dataset_size, input_dim=input_dim)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    logger.info(f"Dataset size: {len(dataset)} | Batch size: {batch_size} | Epochs: {num_epochs}")
 
-    model.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)
+    # Model, Loss, Optimizer
+    model = SimpleModel(input_size=input_dim, output_size=2).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=config.get("learning_rate", 0.001))
 
-    for epoch in range(epochs):
+    # Training loop
+    for epoch in range(num_epochs):
         model.train()
-        total_loss = 0.0
-        for step, batch in enumerate(dataloader):
-            batch = batch.to(device)
+        running_loss = 0.0
+        for batch_idx, (inputs, labels) in enumerate(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            # Forward pass
+            outputs = model(inputs)
+            loss = criterion(outputs, labels.long())
+
+            # Backward pass
             optimizer.zero_grad()
-            outputs = model(batch, labels=batch)
-            loss = outputs.loss
-            total_loss += loss.item()
             loss.backward()
             optimizer.step()
 
-            if step % 100 == 0:
-                print(f"Epoch {epoch+1}/{epochs}, Step {step}, Loss: {loss.item()}")
+            running_loss += loss.item()
 
-        avg_loss = total_loss / len(dataloader)
-        print(f"Epoch {epoch+1} completed. Average Loss: {avg_loss}")
-        checkpoint_path = f"results/checkpoints/epoch_{epoch+1}.pt"
-        save_model(model, checkpoint_path)
-        print(f"Checkpoint saved at: {checkpoint_path}")
+            if batch_idx % 10 == 0:
+                logger.info(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_idx}, Loss: {loss.item():.4f}")
 
-    print("=== Training Complete ===")
+        logger.info(f"Epoch {epoch+1} completed. Average Loss: {running_loss/len(dataloader):.4f}")
 
-def main():
-    train_data_path = "data/raw/sample_train.txt"
-    tokenizer = Tokenizer(train_data_path=train_data_path, vocab_size=config['vocab_size'])
-    model = BARTModel(vocab_size=config['vocab_size'])
-
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    train(model, tokenizer, train_data_path, device=device)
-
-if __name__ == "__main__":
-    main()
+    # Save Model
+    checkpoint_dir = config.get("checkpoint_dir", "checkpoints")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    model_path = os.path.join(checkpoint_dir, "local_model.pth")
+    torch.save(model.state_dict(), model_path)
+    logger.info(f"Model saved at: {model_path}")
+    logger.info("=== Local Training Completed ===")

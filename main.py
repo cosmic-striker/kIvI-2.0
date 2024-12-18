@@ -2,7 +2,7 @@ import os
 import torch
 import socket
 from distributed_training.dt_train import main as distributed_train
-from scripts.train import main as local_train
+from scripts.train import train as local_train
 from scripts.evaluate import evaluate
 from utils.logger import Logger
 from models.config import config
@@ -36,7 +36,7 @@ def list_datasets(dataset_dir):
         logger.error(f"Dataset directory '{dataset_dir}' does not exist.")
         exit(1)
 
-    datasets = [f for f in os.listdir(dataset_dir) if os.path.isdir(os.path.join(dataset_dir, f))]
+    datasets = [f for f in os.listdir(dataset_dir) if os.path.isfile(os.path.join(dataset_dir, f))]
     if not datasets:
         logger.error("No datasets found in the directory.")
         exit(1)
@@ -51,6 +51,7 @@ def main():
     global logger
     system_name = socket.gethostname()
     log_file = os.path.join("logs", "main_training.log")
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)  # Ensure the logs directory exists
     rank = int(os.getenv("RANK", 0))
     logger = Logger(log_file=log_file, rank=rank)
 
@@ -61,7 +62,7 @@ def main():
     gpu_available = check_gpu_availability()
 
     # List Datasets
-    dataset_dir = "datasets"  # Change this path as needed
+    dataset_dir = "data/raw"  # Path updated to match your dataset location
     datasets = list_datasets(dataset_dir)
 
     logger.info("Please select a dataset to train on:")
@@ -83,8 +84,11 @@ def main():
             logger.error("User interrupted the dataset selection. Exiting.")
             exit(1)
 
+    dataset_path = os.path.join(dataset_dir, selected_dataset)
+
     # Ensure Checkpoint Directory Exists
-    os.makedirs(config.get('checkpoint_dir', 'checkpoints'), exist_ok=True)
+    checkpoint_dir = config.get('checkpoint_dir', 'checkpoints')
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
     # Choose Training Mode
     logger.info("Select training mode:")
@@ -98,7 +102,7 @@ def main():
                 logger.info("User selected Local Training mode.")
                 logger.info("Starting Local Training...")
                 try:
-                    local_train(dataset_dir=os.path.join(dataset_dir, selected_dataset), gpu=gpu_available)
+                    local_train(dataset_path=dataset_path, gpu=gpu_available, checkpoint_dir=checkpoint_dir)
                 except Exception as e:
                     logger.error(f"Error during Local Training: {e}")
                 break
@@ -106,7 +110,7 @@ def main():
                 logger.info("User selected Distributed Training mode.")
                 logger.info("Starting Distributed Training...")
                 try:
-                    distributed_train(dataset_dir=os.path.join(dataset_dir, selected_dataset), gpu=gpu_available)
+                    distributed_train(dataset_path=dataset_path, gpu=gpu_available, checkpoint_dir=checkpoint_dir)
                 except Exception as e:
                     logger.error(f"Error during Distributed Training: {e}")
                 break
@@ -119,15 +123,17 @@ def main():
     # Evaluate the Model
     logger.info("Starting Model Evaluation...")
     try:
-        evaluate()
+        model_path = os.path.join(checkpoint_dir, "final_trained_model.pth")
+        test_data_path = os.path.join("data", "processed", "test_data.txt")
+        tokenizer_path = os.path.join("tokenizers", "tokenizer.json")
+        evaluate(model_path=model_path, test_data_path=test_data_path, tokenizer_path=tokenizer_path)
     except Exception as e:
         logger.error(f"Error during Model Evaluation: {e}")
 
     # Save Training Results
     logger.info("Saving the trained model...")
     try:
-        trained_model_path = os.path.join(config['checkpoint_dir'], "final_trained_model.pth")
-        # Simulate model saving logic (actual model saving code goes here)
+        trained_model_path = os.path.join(checkpoint_dir, "final_trained_model.pth")
         logger.info(f"Model saved at: {trained_model_path}")
     except Exception as e:
         logger.error(f"Error while saving the model: {e}")
